@@ -107,9 +107,9 @@ for i in coordinates:
 
 #print(coordinates_1)
 
-for idx,img in enumerate(train_df['image_name']):
-    image = cv2.imread(os.path.join(TRAIN_IMG_PATH, img), cv2.COLOR_RGB2GRAY)
-    fig = plt.imshow(image)
-    fig.axes.add_patch(bbox_to_rect(coordinates_1[idx], 'red'))   
-    plt.show()
-    #print(coordinates_1[idx])
+# for idx,img in enumerate(train_df['image_name']):
+#     image = cv2.imread(os.path.join(TRAIN_IMG_PATH, img), cv2.COLOR_RGB2GRAY)
+#     fig = plt.imshow(image)
+#     fig.axes.add_patch(bbox_to_rect(coordinates_1[idx], 'red'))   
+#     plt.show()
+#     #print(coordinates_1[idx])

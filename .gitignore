@@ -2,3 +2,6 @@
 .venv/
 train
 dev
+output/
+__pycache__/
+
