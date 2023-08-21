@@ -7,8 +7,8 @@ from keras.layers import Dense
 from keras.layers import Input
 from keras.models import Model
 from keras.optimizers import Adam
-from keras.preprocessing.image import img_to_array
-from keras.preprocessing.image import load_img
+from tensorflow.keras.utils import img_to_array
+from tensorflow.keras.utils import load_img
 from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 import numpy as np
@@ -20,7 +20,8 @@ from boundingbox import train_df
 IMAGES_PATH = r'train'
 TEST_FILENAMES = os.path.sep.join(["output", "test_images.txt"])
 MODEL_PATH = os.path.sep.join(["output", "detector.h5"])
-PLOT_PATH = os.path.sep.join(["output", "plot.png"])
+LOSS_PLOT_PATH = os.path.sep.join(["output", "plot.png"])
+ACC_PLOT_PATH = os.path.sep.join(["output", "acc.png"])
 INIT_LR = 1e-4
 NUM_EPOCHS = 25
 BATCH_SIZE = 32
@@ -121,6 +122,19 @@ plt.title("Bounding Box Regression Loss on Training Set")
 plt.xlabel("Epoch #")
 plt.ylabel("Loss")
 plt.legend(loc="lower left")
-plt.savefig(PLOT_PATH)
+plt.savefig(LOSS_PLOT_PATH)
+
+# plot the model training history
+N = NUM_EPOCHS
+plt.style.use("ggplot")
+plt.figure()
+plt.plot(np.arange(0, N), H.history["accuracy"], label="train_accuracy")
+plt.plot(np.arange(0, N), H.history["val_accuracy"], label="val_accuracy")
+plt.title("Bounding Box Regression Accuracy on Training Set")
+plt.xlabel("Epoch #")
+plt.ylabel("Loss")
+plt.legend(loc="lower left")
+plt.savefig(ACC_PLOT_PATH)
+
 
 
