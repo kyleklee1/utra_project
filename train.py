@@ -65,7 +65,7 @@ targets = np.array(targets, dtype="float32")
 # partition the data into training and testing splits using 90% of
 # the data for training and the remaining 10% for testing
 split = train_test_split(data, targets, filenames, test_size=0.10,
-	random_state=42)
+    random_state=42)
 # unpack the data split
 (trainImages, testImages) = split[:2]
 (trainTargets, testTargets) = split[2:4]
@@ -77,9 +77,36 @@ f = open(TEST_FILENAMES, "w")
 f.write("\n".join(testFilenames))
 f.close()
 
+
+def generalized_IOU_loss(y_true, y_predict):
+    (x1p, y1p, x2p, y2p) = y_predict
+    (x1g, y1g, x2g, y2g) = y_true
+    if x2p > x1p and y2p > y1p:
+        x1phat = min(x1p, x2p)
+        x2phat = max(x1p, x2p)
+        y1phat = min(y1p, y2p)
+        y2phat = max(y1p, y2p)
+        Ag = (x2g - x1g) * (y2g - y1g)
+        Ap = (x2phat - x1phat) * (y2phat - y1phat)
+        x1I = max(x1phat, x1g)
+        x2I = min(x2phat, x2g)
+        y1I = max(y1phat, y1g)
+        y2I = min(y2phat, y2g)
+        I = (x2I - x1I) * (y2I - y1I) if (x2I > x1I and y2I > y1I) else 0
+        x1c = min(x1phat, x1g)
+        x2c = max(x2phat, x2g)
+        y1c = min(y1phat, y1g)
+        y2c = max(y2phat, y2g)
+        Ac = (x2c - x1c) * (y2c - y1c)
+        U = Ap + Ag - I
+        IoU = I/U
+        GIoU = IoU - (Ac - U)/Ac
+        GIOU_loss = 1-GIoU
+        return GIOU_loss
+
 # load the VGG16 network, ensuring the head FC layers are left off
 vgg = tf.keras.applications.vgg16.VGG16(weights="imagenet", include_top=False,
-	input_tensor=Input(shape=(224, 224, 3)))
+    input_tensor=Input(shape=(224, 224, 3)))
 # freeze all VGG layers so they will *not* be updated during the
 # training process
 vgg.trainable = False
@@ -98,16 +125,17 @@ model = Model(inputs=vgg.input, outputs=bboxHead)
 # initialize the optimizer, compile the model, and show the model
 # summary
 opt = Adam(lr=INIT_LR)
-model.compile(loss="mse", optimizer=opt)
+#model.compile(loss="mse", optimizer=opt)
+model.compile(loss=generalized_IOU_loss, optimizer=opt)
 print(model.summary())
 # train the network for bounding box regression
 print("[INFO] training bounding box regressor...")
 H = model.fit(
-	trainImages, trainTargets,
-	validation_data=(testImages, testTargets),
-	batch_size=BATCH_SIZE,
-	epochs=NUM_EPOCHS,
-	verbose=1)
+    trainImages, trainTargets,
+    validation_data=(testImages, testTargets),
+    batch_size=BATCH_SIZE,
+    epochs=NUM_EPOCHS,
+    verbose=1)
 
 # serialize the model to disk
 print("[INFO] saving object detector model...")
