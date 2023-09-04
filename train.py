@@ -79,8 +79,6 @@ f = open(TEST_FILENAMES, "w")
 f.write("\n".join(testFilenames))
 f.close()
 
-print(trainImages, trainTargets)
-
 def generalized_IOU_loss(y_true, y_predict):
     #print(tf.keras.backend.eval(y_true))
     #print(tf.keras.backend.eval(y_true[:, 0]))
@@ -165,7 +163,7 @@ model = Model(inputs=vgg.input, outputs=bboxHead)
 # summary
 opt = Adam(lr=INIT_LR)
 #model.compile(loss="mse", optimizer=opt)
-model.compile(loss=GIoU, optimizer=opt, run_eagerly=True)
+model.compile(loss=GIoU, optimizer=opt, run_eagerly=True, metrics = ['acc'])
 print(model.summary())
 # train the network for bounding box regression
 print("[INFO] training bounding box regressor...")

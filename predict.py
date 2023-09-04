@@ -10,6 +10,7 @@ import imutils
 import cv2
 import os
 import matplotlib.pyplot as plt
+from train import GIoU
 
 IMAGES_PATH = r'train'
 MODEL_PATH = os.path.sep.join(["output", "detector.h5"])
@@ -49,7 +50,7 @@ if "text/plain" == filetype:
 
 # load our trained bounding box regressor from disk
 print("[INFO] loading object detector...")
-model = load_model(MODEL_PATH)
+model = load_model(MODEL_PATH, custom_objects = {'GIoU' : GIoU})
 # loop over the images that we'll be testing using our bounding box
 # regression model
 for imagePath in imagePaths:
@@ -75,5 +76,6 @@ for imagePath in imagePaths:
     endY = int(endY * h)
     # draw the predicted bounding box on the image
     fig = plt.imshow(image)
-    fig.axes.add_patch(bbox_to_rect([startX, startY, endX, endY], 'blue'))   
+    fig.axes.add_patch(bbox_to_rect([startX, startY, endX, endY], 'blue')) 
+    print(startX, startY, endX, endY)  
     plt.show()
