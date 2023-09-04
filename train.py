@@ -15,6 +15,8 @@ import numpy as np
 import cv2
 import os
 from boundingbox import train_df
+from tensorflow.python.ops.numpy_ops import np_config
+np_config.enable_numpy_behavior()
 
 # load the contents of the CSV annotations file
 IMAGES_PATH = r'train'
@@ -77,33 +79,70 @@ f = open(TEST_FILENAMES, "w")
 f.write("\n".join(testFilenames))
 f.close()
 
+print(trainImages, trainTargets)
 
 def generalized_IOU_loss(y_true, y_predict):
-    (x1p, y1p, x2p, y2p) = y_predict
-    (x1g, y1g, x2g, y2g) = y_true
-    if x2p > x1p and y2p > y1p:
-        x1phat = min(x1p, x2p)
-        x2phat = max(x1p, x2p)
-        y1phat = min(y1p, y2p)
-        y2phat = max(y1p, y2p)
-        Ag = (x2g - x1g) * (y2g - y1g)
-        Ap = (x2phat - x1phat) * (y2phat - y1phat)
-        x1I = max(x1phat, x1g)
-        x2I = min(x2phat, x2g)
-        y1I = max(y1phat, y1g)
-        y2I = min(y2phat, y2g)
-        I = (x2I - x1I) * (y2I - y1I) if (x2I > x1I and y2I > y1I) else 0
-        x1c = min(x1phat, x1g)
-        x2c = max(x2phat, x2g)
-        y1c = min(y1phat, y1g)
-        y2c = max(y2phat, y2g)
-        Ac = (x2c - x1c) * (y2c - y1c)
-        U = Ap + Ag - I
-        IoU = I/U
-        GIoU = IoU - (Ac - U)/Ac
-        GIOU_loss = 1-GIoU
-        return GIOU_loss
+    #print(tf.keras.backend.eval(y_true))
+    #print(tf.keras.backend.eval(y_true[:, 0]))
+    #(x1p, y1p, x2p, y2p) = y_predict
+    print(tf.keras.backend.eval(y_true))
+    print(tf.keras.backend.eval(y_predict))
+    x1p = tf.keras.backend.eval(y_predict[:, 0])
+    y1p = tf.keras.backend.eval(y_predict[:, 1])
+    x2p = tf.keras.backend.eval(y_predict[:, 2])
+    y2p = tf.keras.backend.eval(y_predict[:, 3])
+    #(x1g, y1g, x2g, y2g) = y_true
+    x1g = tf.keras.backend.eval(y_true[:, 0])
+    y1g = tf.keras.backend.eval(y_true[:, 1])
+    x2g = tf.keras.backend.eval(y_true[:, 2])
+    y2g = tf.keras.backend.eval(y_true[:, 3])
+    #if x2p > x1p and y2p > y1p:
+    x1phat = np.minimum(x1p, x2p)
+    x2phat = np.maximum(x1p, x2p)
+    y1phat = np.minimum(y1p, y2p)
+    y2phat = np.maximum(y1p, y2p)
+    Ag = np.multiply((x2g - x1g), (y2g - y1g))
+    Ap = np.multiply((x2phat - x1phat), (y2phat - y1phat))
+    x1I = np.maximum(x1phat, x1g)
+    x2I = np.minimum(x2phat, x2g)
+    y1I = np.maximum(y1phat, y1g)
+    y2I = np.minimum(y2phat, y2g)
+    I = np.where(np.logical_and(x2I > x1I, y2I > y1I), (x2I - x1I) * (y2I - y1I), 0)
+    #(x2I - x1I) * (y2I - y1I) if (x2I > x1I and y2I > y1I) else 0
+    x1c = np.minimum(x1phat, x1g)
+    x2c = np.maximum(x2phat, x2g)
+    y1c = np.minimum(y1phat, y1g)
+    y2c = np.maximum(y2phat, y2g)
+    Ac = np.multiply((x2c - x1c), (y2c - y1c))
+    U = Ap + Ag - I
+    IoU = np.divide(I, U)
+    GIoU = np.divide(IoU - (Ac - U), Ac)
+    GIOU_loss = 1-GIoU
+    print(tf.math.reduce_sum(GIOU_loss))
+    return tf.math.reduce_sum(GIOU_loss)
 
+def GIoU(bboxes_1, bboxes_2):
+    # 1. calulate intersection over union
+    area_1 = (bboxes_1[..., 2] - bboxes_1[..., 0]) * (bboxes_1[..., 3] - bboxes_1[..., 1])
+    area_2 = (bboxes_2[..., 2] - bboxes_2[..., 0]) * (bboxes_2[..., 3] - bboxes_2[..., 1])
+    
+    intersection_wh = tf.minimum(bboxes_1[:, 2:], bboxes_2[:, 2:]) - tf.maximum(bboxes_1[:, :2], bboxes_2[:, :2])
+    intersection_wh = tf.maximum(intersection_wh, 0)
+    
+    intersection = intersection_wh[..., 0] * intersection_wh[..., 1]
+    union = (area_1 + area_2) - intersection
+    
+    ious = intersection / tf.maximum(union, 1e-10)
+
+    # 2. (C - (A U B))/C
+    C_wh = tf.maximum(bboxes_1[..., 2:], bboxes_2[..., 2:]) - tf.minimum(bboxes_1[..., :2], bboxes_2[..., :2])
+    C_wh = tf.maximum(C_wh, 0.0)
+    C = C_wh[..., 0] * C_wh[..., 1]
+    
+    giou = ious - (C - union) / tf.maximum(C, 1e-10)
+    print("Loss:", 1-giou)
+    return 1-giou
+    
 # load the VGG16 network, ensuring the head FC layers are left off
 vgg = tf.keras.applications.vgg16.VGG16(weights="imagenet", include_top=False,
     input_tensor=Input(shape=(224, 224, 3)))
@@ -126,7 +165,7 @@ model = Model(inputs=vgg.input, outputs=bboxHead)
 # summary
 opt = Adam(lr=INIT_LR)
 #model.compile(loss="mse", optimizer=opt)
-model.compile(loss=generalized_IOU_loss, optimizer=opt)
+model.compile(loss=GIoU, optimizer=opt, run_eagerly=True)
 print(model.summary())
 # train the network for bounding box regression
 print("[INFO] training bounding box regressor...")
