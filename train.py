@@ -118,10 +118,11 @@ def generalized_IOU_loss(y_true, y_predict):
     IoU = np.divide(I, U)
     GIoU = np.divide(IoU - (Ac - U), Ac)
     GIOU_loss = 1-GIoU
-    print(tf.math.reduce_sum(GIOU_loss))
     return tf.math.reduce_sum(GIOU_loss)
 
 def GIoU(bboxes_1, bboxes_2):
+    # https://github.com/shjo-april/Tensorflow_GIoU/blob/master/README.md
+    # https://www.ai.rug.nl/~mwiering/GROUP/ARTICLES/DNN_IOU_SEGMENTATION.pdf
     # 1. calulate intersection over union
     area_1 = (bboxes_1[..., 2] - bboxes_1[..., 0]) * (bboxes_1[..., 3] - bboxes_1[..., 1])
     area_2 = (bboxes_2[..., 2] - bboxes_2[..., 0]) * (bboxes_2[..., 3] - bboxes_2[..., 1])
@@ -140,7 +141,6 @@ def GIoU(bboxes_1, bboxes_2):
     C = C_wh[..., 0] * C_wh[..., 1]
     
     giou = ious - (C - union) / tf.maximum(C, 1e-10)
-    print("Loss:", 1-giou)
     return 1-giou
     
 # load the VGG16 network, ensuring the head FC layers are left off
@@ -195,8 +195,8 @@ plt.savefig(LOSS_PLOT_PATH)
 N = NUM_EPOCHS
 plt.style.use("ggplot")
 plt.figure()
-plt.plot(np.arange(0, N), H.history["accuracy"], label="train_accuracy")
-plt.plot(np.arange(0, N), H.history["val_accuracy"], label="val_accuracy")
+plt.plot(np.arange(0, N), H.history["acc"], label="train_accuracy")
+plt.plot(np.arange(0, N), H.history["val_acc"], label="val_accuracy")
 plt.title("Bounding Box Regression Accuracy on Training Set")
 plt.xlabel("Epoch #")
 plt.ylabel("Loss")
