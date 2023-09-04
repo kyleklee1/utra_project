@@ -140,6 +140,23 @@ def GIoU(bboxes_1, bboxes_2):
     
     giou = ious - (C - union) / tf.maximum(C, 1e-10)
     return 1-giou
+
+def IoU_metric(bboxes_1, bboxes_2):
+    # https://github.com/shjo-april/Tensorflow_GIoU/blob/master/README.md
+    # https://www.ai.rug.nl/~mwiering/GROUP/ARTICLES/DNN_IOU_SEGMENTATION.pdf
+    # 1. calulate intersection over union
+    area_1 = (bboxes_1[..., 2] - bboxes_1[..., 0]) * (bboxes_1[..., 3] - bboxes_1[..., 1])
+    area_2 = (bboxes_2[..., 2] - bboxes_2[..., 0]) * (bboxes_2[..., 3] - bboxes_2[..., 1])
+    
+    intersection_wh = tf.minimum(bboxes_1[:, 2:], bboxes_2[:, 2:]) - tf.maximum(bboxes_1[:, :2], bboxes_2[:, :2])
+    intersection_wh = tf.maximum(intersection_wh, 0)
+    
+    intersection = intersection_wh[..., 0] * intersection_wh[..., 1]
+    union = (area_1 + area_2) - intersection
+    
+    ious = intersection / tf.maximum(union, 1e-10)
+    print("IoUS:", ious)
+    return ious
     
 # load the VGG16 network, ensuring the head FC layers are left off
 vgg = tf.keras.applications.vgg16.VGG16(weights="imagenet", include_top=False,
@@ -163,7 +180,7 @@ model = Model(inputs=vgg.input, outputs=bboxHead)
 # summary
 opt = Adam(lr=INIT_LR)
 #model.compile(loss="mse", optimizer=opt)
-model.compile(loss=GIoU, optimizer=opt, run_eagerly=True, metrics = ['acc'])
+model.compile(loss=GIoU, optimizer=opt, run_eagerly=True, metrics = [IoU_metric])
 print(model.summary())
 # train the network for bounding box regression
 print("[INFO] training bounding box regressor...")
