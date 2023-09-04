@@ -155,8 +155,12 @@ def IoU_metric(bboxes_1, bboxes_2):
     union = (area_1 + area_2) - intersection
     
     ious = intersection / tf.maximum(union, 1e-10)
-    print("IoUS:", ious)
-    return ious
+    #print("IoUS:", ious)
+    threshold = 0.2
+    greater_elts = tf.math.greater(ious, threshold)
+    num_greater = tf.math.reduce_sum(tf.cast(greater_elts, tf.int32))
+    total = tf.math.reduce_sum(tf.cast(ious, tf.int32))
+    return tf.math.divide(num_greater, total)
     
 # load the VGG16 network, ensuring the head FC layers are left off
 vgg = tf.keras.applications.vgg16.VGG16(weights="imagenet", include_top=False,
