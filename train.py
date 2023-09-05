@@ -156,7 +156,7 @@ def IoU_metric(bboxes_1, bboxes_2):
     
     ious = intersection / tf.maximum(union, 1e-10)
     #print("IoUS:", ious)
-    threshold = 0.1
+    threshold = 0.2
     greater_elts = tf.math.greater(ious, threshold)
     num_greater = tf.math.reduce_sum(tf.cast(greater_elts, tf.int32))
     total = tf.size(ious)
