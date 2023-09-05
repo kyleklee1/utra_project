@@ -156,10 +156,13 @@ def IoU_metric(bboxes_1, bboxes_2):
     
     ious = intersection / tf.maximum(union, 1e-10)
     #print("IoUS:", ious)
-    threshold = 0.2
+    threshold = 0.1
     greater_elts = tf.math.greater(ious, threshold)
     num_greater = tf.math.reduce_sum(tf.cast(greater_elts, tf.int32))
-    total = tf.math.reduce_sum(tf.cast(ious, tf.int32))
+    total = tf.size(ious)
+    print("Num_greater: ", num_greater)
+    print("Total:", total)
+    print("ious:", ious)
     return tf.math.divide(num_greater, total)
     
 # load the VGG16 network, ensuring the head FC layers are left off
@@ -184,7 +187,7 @@ model = Model(inputs=vgg.input, outputs=bboxHead)
 # summary
 opt = Adam(lr=INIT_LR)
 #model.compile(loss="mse", optimizer=opt)
-model.compile(loss=GIoU, optimizer=opt, run_eagerly=True, metrics = [IoU_metric])
+model.compile(loss="mse", optimizer=opt, run_eagerly=True, metrics = [IoU_metric])
 print(model.summary())
 # train the network for bounding box regression
 print("[INFO] training bounding box regressor...")
