@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import cv2
 import os
+import tensorflow_addons as tfa
 from boundingbox import train_df
 from tensorflow.python.ops.numpy_ops import np_config
 np_config.enable_numpy_behavior()
@@ -160,9 +161,9 @@ def IoU_metric(bboxes_1, bboxes_2):
     greater_elts = tf.math.greater(ious, threshold)
     num_greater = tf.math.reduce_sum(tf.cast(greater_elts, tf.int32))
     total = tf.size(ious)
-    print("Num_greater: ", num_greater)
-    print("Total:", total)
-    print("ious:", ious)
+    # print("Num_greater: ", num_greater)
+    # print("Total:", total)
+    # print("ious:", ious)
     return tf.math.divide(num_greater, total)
     
 # load the VGG16 network, ensuring the head FC layers are left off
@@ -199,6 +200,8 @@ H = model.fit(
     verbose=1)
 
 # serialize the model to disk
+print("Keys: ", H.history.keys())
+
 print("[INFO] saving object detector model...")
 model.save(MODEL_PATH, save_format="h5")
 # plot the model training history
