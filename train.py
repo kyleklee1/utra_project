@@ -33,7 +33,6 @@ data = []
 targets = []
 filenames = []
 
-
 print("[INFO] loading dataset...")
 rows = train_df['annotation']
 count = 0
@@ -188,7 +187,7 @@ model = Model(inputs=vgg.input, outputs=bboxHead)
 # summary
 opt = Adam(lr=INIT_LR)
 #model.compile(loss="mse", optimizer=opt)
-model.compile(loss=tfa.losses.GIoULoss(), optimizer=opt, run_eagerly=True, metrics = [IoU_metric])
+model.compile(loss="mse" optimizer=opt, run_eagerly=True, metrics = [IoU_metric])
 print(model.summary())
 # train the network for bounding box regression
 print("[INFO] training bounding box regressor...")
@@ -224,7 +223,7 @@ plt.plot(np.arange(0, N), H.history["IoU_metric"], label="train_accuracy")
 plt.plot(np.arange(0, N), H.history["val_IoU_metric"], label="val_accuracy")
 plt.title("Bounding Box Regression Accuracy on Training Set")
 plt.xlabel("Epoch #")
-plt.ylabel("Loss")
+plt.ylabel("Accuracy")
 plt.legend(loc="lower left")
 plt.savefig(ACC_PLOT_PATH)
 
