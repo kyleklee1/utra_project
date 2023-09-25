@@ -5,6 +5,7 @@ from keras.applications.vgg16 import VGG16
 from keras.layers import Flatten
 from keras.layers import Dense
 from keras.layers import Input
+from keras.layers import Dropout
 from keras.models import Model
 from keras.optimizers import Adam
 from tensorflow.keras.utils import img_to_array
@@ -16,6 +17,14 @@ import cv2
 import os
 import tensorflow_addons as tfa
 from boundingbox import train_df
+import splitfolders
+
+from keras.preprocessing.image import ImageDataGenerator
+from argparse import ArgumentParser
+import random
+from PIL import Image
+import pandas as pd
+import re
 from tensorflow.python.ops.numpy_ops import np_config
 np_config.enable_numpy_behavior()
 
@@ -28,6 +37,8 @@ ACC_PLOT_PATH = os.path.sep.join(["output", "acc.png"])
 INIT_LR = 1e-4
 NUM_EPOCHS = 25
 BATCH_SIZE = 32
+IMG_SIZE = 224
+PREPROCESS_SAMPLE_SIZE = 500
 
 data = []
 targets = []
@@ -36,6 +47,7 @@ filenames = []
 print("[INFO] loading dataset...")
 rows = train_df['annotation']
 count = 0
+file_list = []
 for row in rows:
     filename = train_df['image_name'][count]
     (_, startX, startY, endX, endY) = row
@@ -44,6 +56,7 @@ for row in rows:
     # derive the path to the input image, load the image (in OpenCV
     # format), and grab its dimensions
     imagePath = os.path.sep.join([IMAGES_PATH, filename])
+    file_list.append(imagePath)
     image = cv2.imread(imagePath)
     (h, w) = image.shape[:2]
     # scale the bounding box coordinates relative to the spatial
@@ -66,80 +79,21 @@ data = np.array(data, dtype="float32") / 255.0
 targets = np.array(targets, dtype="float32")
 # partition the data into training and testing splits using 90% of
 # the data for training and the remaining 10% for testing
-split = train_test_split(data, targets, filenames, test_size=0.10,
-    random_state=42)
-# unpack the data split
-(trainImages, testImages) = split[:2]
-(trainTargets, testTargets) = split[2:4]
-(trainFilenames, testFilenames) = split[4:]
-# write the testing filenames to disk so that we can use then
-# when evaluating/testing our bounding box regressor
-print("[INFO] saving testing filenames...")
-f = open(TEST_FILENAMES, "w")
-f.write("\n".join(testFilenames))
-f.close()
 
-def generalized_IOU_loss(y_true, y_predict):
-    #print(tf.keras.backend.eval(y_true))
-    #print(tf.keras.backend.eval(y_true[:, 0]))
-    #(x1p, y1p, x2p, y2p) = y_predict
-    print(tf.keras.backend.eval(y_true))
-    print(tf.keras.backend.eval(y_predict))
-    x1p = tf.keras.backend.eval(y_predict[:, 0])
-    y1p = tf.keras.backend.eval(y_predict[:, 1])
-    x2p = tf.keras.backend.eval(y_predict[:, 2])
-    y2p = tf.keras.backend.eval(y_predict[:, 3])
-    #(x1g, y1g, x2g, y2g) = y_true
-    x1g = tf.keras.backend.eval(y_true[:, 0])
-    y1g = tf.keras.backend.eval(y_true[:, 1])
-    x2g = tf.keras.backend.eval(y_true[:, 2])
-    y2g = tf.keras.backend.eval(y_true[:, 3])
-    #if x2p > x1p and y2p > y1p:
-    x1phat = np.minimum(x1p, x2p)
-    x2phat = np.maximum(x1p, x2p)
-    y1phat = np.minimum(y1p, y2p)
-    y2phat = np.maximum(y1p, y2p)
-    Ag = np.multiply((x2g - x1g), (y2g - y1g))
-    Ap = np.multiply((x2phat - x1phat), (y2phat - y1phat))
-    x1I = np.maximum(x1phat, x1g)
-    x2I = np.minimum(x2phat, x2g)
-    y1I = np.maximum(y1phat, y1g)
-    y2I = np.minimum(y2phat, y2g)
-    I = np.where(np.logical_and(x2I > x1I, y2I > y1I), (x2I - x1I) * (y2I - y1I), 0)
-    #(x2I - x1I) * (y2I - y1I) if (x2I > x1I and y2I > y1I) else 0
-    x1c = np.minimum(x1phat, x1g)
-    x2c = np.maximum(x2phat, x2g)
-    y1c = np.minimum(y1phat, y1g)
-    y2c = np.maximum(y2phat, y2g)
-    Ac = np.multiply((x2c - x1c), (y2c - y1c))
-    U = Ap + Ag - I
-    IoU = np.divide(I, U)
-    GIoU = np.divide(IoU - (Ac - U), Ac)
-    GIOU_loss = 1-GIoU
-    return tf.math.reduce_sum(GIOU_loss)
+# split = train_test_split(data, targets, filenames, test_size=0.10,
+#     random_state=42)
+# # unpack the data split
+# (trainImages, testImages) = split[:2]
+# (trainTargets, testTargets) = split[2:4]
+# (trainFilenames, testFilenames) = split[4:]
+# # write the testing filenames to disk so that we can use then
+# # when evaluating/testing our bounding box regressor
+# print("[INFO] saving testing filenames...")
+# f = open(TEST_FILENAMES, "w")
+# f.write("\n".join(testFilenames))
+# f.close()
 
-def GIoU(bboxes_1, bboxes_2):
-    # https://github.com/shjo-april/Tensorflow_GIoU/blob/master/README.md
-    # https://www.ai.rug.nl/~mwiering/GROUP/ARTICLES/DNN_IOU_SEGMENTATION.pdf
-    # 1. calulate intersection over union
-    area_1 = (bboxes_1[..., 2] - bboxes_1[..., 0]) * (bboxes_1[..., 3] - bboxes_1[..., 1])
-    area_2 = (bboxes_2[..., 2] - bboxes_2[..., 0]) * (bboxes_2[..., 3] - bboxes_2[..., 1])
-    
-    intersection_wh = tf.minimum(bboxes_1[:, 2:], bboxes_2[:, 2:]) - tf.maximum(bboxes_1[:, :2], bboxes_2[:, :2])
-    intersection_wh = tf.maximum(intersection_wh, 0)
-    
-    intersection = intersection_wh[..., 0] * intersection_wh[..., 1]
-    union = (area_1 + area_2) - intersection
-    
-    ious = intersection / tf.maximum(union, 1e-10)
-
-    # 2. (C - (A U B))/C
-    C_wh = tf.maximum(bboxes_1[..., 2:], bboxes_2[..., 2:]) - tf.minimum(bboxes_1[..., :2], bboxes_2[..., :2])
-    C_wh = tf.maximum(C_wh, 0.0)
-    C = C_wh[..., 0] * C_wh[..., 1]
-    
-    giou = ious - (C - union) / tf.maximum(C, 1e-10)
-    return 1-giou
+splitfolders.ratio('IMAGES_PATH', output="output", seed=1337, ratio=(.8, 0.1,0.1)) 
 
 def IoU_metric(bboxes_1, bboxes_2):
     # https://github.com/shjo-april/Tensorflow_GIoU/blob/master/README.md
@@ -164,7 +118,65 @@ def IoU_metric(bboxes_1, bboxes_2):
     # print("Total:", total)
     # print("ious:", ious)
     return tf.math.divide(num_greater, total)
-    
+
+
+def calc_mean_std():
+    # Shuffle filepaths
+    random.shuffle(file_list)
+
+    # Take sample of file paths
+    file_list = file_list[:PREPROCESS_SAMPLE_SIZE]
+
+    # Allocate space in memory for images
+    data_sample = np.zeros( (PREPROCESS_SAMPLE_SIZE, IMG_SIZE, IMG_SIZE, 3))
+
+    # Import images
+    for i, file_path in enumerate(file_list):
+        img = Image.open(file_path)
+        img = img.resize((224, 224))
+        img = np.array(img, dtype=np.float32)
+        img /= 255.
+
+        # Grayscale -> RGB
+        if len(img.shape) == 2:
+            img = np.stack([img, img, img], axis=-1)
+        data_sample[i] = img
+
+    return np.mean(data_sample, axis=0), np.std(data_sample, axis=0) + 1.0e-8
+
+
+def custom_preprocess_fn(img):
+    #implement image standardization
+    img = (img - MEAN)/STD
+    return img
+
+
+MEAN, STD = calc_mean_std()
+
+train_datagen = ImageDataGenerator(
+    rescale=1./255,
+    rotation_range=30,
+    width_shift_range=0.2,
+    height_shift_range=0.2,
+    zoom_range=0.2,
+    horizontal_flip=True,
+    fill_mode='nearest',
+    preprocessing_function=custom_preprocess_fn
+)
+
+validation_datagen = ImageDataGenerator(rescale=1./255)
+
+TRAIN_PATH = r'output/train'
+VALID_PATH = r'output/val'
+# create the training and validation sets
+train_generator = train_datagen.flow_from_directory(TRAIN_PATH,
+                                                    target_size=(256, 256),
+                                                    batch_size=BATCH_SIZE)
+
+validation_generator = validation_datagen.flow_from_directory(VALID_PATH,
+                                                            target_size=(256, 256),
+                                                            batch_size=BATCH_SIZE)
+
 # load the VGG16 network, ensuring the head FC layers are left off
 vgg = tf.keras.applications.vgg16.VGG16(weights="imagenet", include_top=False,
     input_tensor=Input(shape=(224, 224, 3)))
@@ -173,6 +185,7 @@ vgg = tf.keras.applications.vgg16.VGG16(weights="imagenet", include_top=False,
 vgg.trainable = False
 # flatten the max-pooling output of VGG
 flatten = vgg.output
+flatten = Dropout(0.2)(flatten)
 flatten = Flatten()(flatten)
 # construct a fully-connected layer header to output the predicted
 # bounding box coordinates
@@ -187,13 +200,15 @@ model = Model(inputs=vgg.input, outputs=bboxHead)
 # summary
 opt = Adam(lr=INIT_LR)
 #model.compile(loss="mse", optimizer=opt)
-model.compile(loss="mse" optimizer=opt, run_eagerly=True, metrics = [IoU_metric])
+model.compile(loss="mse", optimizer=opt, run_eagerly=True, metrics = [IoU_metric])
 print(model.summary())
 # train the network for bounding box regression
 print("[INFO] training bounding box regressor...")
 H = model.fit(
-    trainImages, trainTargets,
-    validation_data=(testImages, testTargets),
+    #trainImages, trainTargets,
+    train_generator,
+    #validation_data=(testImages, testTargets),
+    validation_data = validation_generator,
     batch_size=BATCH_SIZE,
     epochs=NUM_EPOCHS,
     verbose=1)
@@ -203,7 +218,7 @@ print("Keys: ", H.history.keys())
 
 print("[INFO] saving object detector model...")
 model.save(MODEL_PATH, save_format="h5")
-# plot the model training history
+# plot the model training history for loss
 N = NUM_EPOCHS
 plt.style.use("ggplot")
 plt.figure()
@@ -215,7 +230,7 @@ plt.ylabel("Loss")
 plt.legend(loc="lower left")
 plt.savefig(LOSS_PLOT_PATH)
 
-# plot the model training history
+# plot the model training history for accuracy
 N = NUM_EPOCHS
 plt.style.use("ggplot")
 plt.figure()
