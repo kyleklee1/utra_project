@@ -17,9 +17,11 @@ import cv2
 import os
 import tensorflow_addons as tfa
 from boundingbox import train_df
-import splitfolders
+
+import shutil
 
 from keras.preprocessing.image import ImageDataGenerator
+import albumentations as A
 from argparse import ArgumentParser
 import random
 from PIL import Image
@@ -29,7 +31,7 @@ from tensorflow.python.ops.numpy_ops import np_config
 np_config.enable_numpy_behavior()
 
 # load the contents of the CSV annotations file
-IMAGES_PATH = r'train'
+IMAGES_PATH = r'train/'
 TEST_FILENAMES = os.path.sep.join(["output", "test_images.txt"])
 MODEL_PATH = os.path.sep.join(["output", "detector.h5"])
 LOSS_PLOT_PATH = os.path.sep.join(["output", "plot.png"])
@@ -72,7 +74,7 @@ for row in rows:
     data.append(image)
     targets.append((startX, startY, endX, endY))
     filenames.append(filename)
-
+print("File List: ",  file_list)
 # convert the data and targets to NumPy arrays, scaling the input
 # pixel intensities from the range [0, 255] to [0, 1]
 data = np.array(data, dtype="float32") / 255.0
@@ -80,21 +82,29 @@ targets = np.array(targets, dtype="float32")
 # partition the data into training and testing splits using 90% of
 # the data for training and the remaining 10% for testing
 
-# split = train_test_split(data, targets, filenames, test_size=0.10,
-#     random_state=42)
-# # unpack the data split
-# (trainImages, testImages) = split[:2]
-# (trainTargets, testTargets) = split[2:4]
-# (trainFilenames, testFilenames) = split[4:]
+split = train_test_split(data, targets, filenames, test_size=0.10,
+    random_state=42)
+# unpack the data split
+(trainImages, validationImages) = split[:2]
+(trainTargets, validationTargets) = split[2:4]
+(trainFilenames, validationFilenames) = split[4:]
 # # write the testing filenames to disk so that we can use then
 # # when evaluating/testing our bounding box regressor
+TRAIN_PATH = r'trainImages'
+VALID_PATH = r'validImages'
+for filename in trainFilenames:
+    original_image = IMAGES_PATH + "/" + filename
+    new_image = os.path.sep.join([TRAIN_PATH, filename])
+    shutil.copy(original_image, new_image)
+for filename in validationFilenames:
+    original_image = IMAGES_PATH + "/" + filename
+    new_image = os.path.sep.join([VALID_PATH, filename])
+    shutil.copy(original_image, new_image)
 # print("[INFO] saving testing filenames...")
 # f = open(TEST_FILENAMES, "w")
 # f.write("\n".join(testFilenames))
 # f.close()
-
-splitfolders.ratio('IMAGES_PATH', output="output", seed=1337, ratio=(.8, 0.1,0.1)) 
-
+ 
 def IoU_metric(bboxes_1, bboxes_2):
     # https://github.com/shjo-april/Tensorflow_GIoU/blob/master/README.md
     # https://www.ai.rug.nl/~mwiering/GROUP/ARTICLES/DNN_IOU_SEGMENTATION.pdf
@@ -120,7 +130,7 @@ def IoU_metric(bboxes_1, bboxes_2):
     return tf.math.divide(num_greater, total)
 
 
-def calc_mean_std():
+def calc_mean_std(file_list):
     # Shuffle filepaths
     random.shuffle(file_list)
 
@@ -151,8 +161,28 @@ def custom_preprocess_fn(img):
     return img
 
 
-MEAN, STD = calc_mean_std()
+MEAN, STD = calc_mean_std(file_list)
+####################################
+class AugmentDataGenerator(Sequence):
+    def __init__(self, datagen, augment=None):
+        self.datagen = datagen
+        if augment is None:
+            self.augment = A.Compose([])
+        else:
+            self.augment = augment
 
+    def __len__(self):
+        return len(self.datagen)
+
+    def __getitem__(self, x):
+        images, *rest = self.datagen[x]
+        augmented = []
+        for image in images:
+            image = self.augment(image=image)['image']
+            augmented.append(image)
+        return (np.array(augmented), *rest)
+
+#####################################
 train_datagen = ImageDataGenerator(
     rescale=1./255,
     rotation_range=30,
@@ -164,10 +194,17 @@ train_datagen = ImageDataGenerator(
     preprocessing_function=custom_preprocess_fn
 )
 
+train_datagen = AugmentDataGenerator(train_datagen, A.Compose([
+        A.HorizontalFlip(p=0.5),
+        A.ShiftScaleRotate(p=0.5),
+        A.RandomBrightnessContrast(p=0.3),
+        A.RGBShift(r_shift_limit=30, g_shift_limit=30, b_shift_limit=30, p=0.3),
+    ],
+    bbox_params=A.BboxParams(format='coco'),
+))
+
 validation_datagen = ImageDataGenerator(rescale=1./255)
 
-TRAIN_PATH = r'output/train'
-VALID_PATH = r'output/val'
 # create the training and validation sets
 train_generator = train_datagen.flow_from_directory(TRAIN_PATH,
                                                     target_size=(256, 256),
@@ -241,6 +278,8 @@ plt.xlabel("Epoch #")
 plt.ylabel("Accuracy")
 plt.legend(loc="lower left")
 plt.savefig(ACC_PLOT_PATH)
+
+
 
 
 
