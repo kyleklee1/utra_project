@@ -10,6 +10,7 @@ from keras.models import Model
 from keras.optimizers import Adam
 from tensorflow.keras.utils import img_to_array
 from tensorflow.keras.utils import load_img
+from tensorflow.keras.utils import Sequence
 from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 import numpy as np
@@ -19,6 +20,8 @@ import tensorflow_addons as tfa
 from boundingbox import train_df
 
 import shutil
+from data_aug import *
+from bbox_util import *
 
 from keras.preprocessing.image import ImageDataGenerator
 import albumentations as A
@@ -88,6 +91,10 @@ split = train_test_split(data, targets, filenames, test_size=0.10,
 (trainImages, validationImages) = split[:2]
 (trainTargets, validationTargets) = split[2:4]
 (trainFilenames, validationFilenames) = split[4:]
+
+traindf = pd.DataFrame({'image_id' : trainFilenames, 'target': trainTargets})
+validdf = pd.DataFrame({'image_id' : validationFilenames, 'target': validationTargets})
+
 # # write the testing filenames to disk so that we can use then
 # # when evaluating/testing our bounding box regressor
 TRAIN_PATH = r'trainImages'
@@ -163,56 +170,51 @@ def custom_preprocess_fn(img):
 
 MEAN, STD = calc_mean_std(file_list)
 ####################################
-class AugmentDataGenerator(Sequence):
-    def __init__(self, datagen, augment=None):
-        self.datagen = datagen
-        if augment is None:
-            self.augment = A.Compose([])
-        else:
-            self.augment = augment
+# class AugmentDataGenerator(Sequence):
+#     def __init__(self, datagen, augment=None):
+#         self.datagen = datagen
+#         if augment is None:
+#             self.augment = A.Compose([])
+#         else:
+#             self.augment = augment
 
-    def __len__(self):
-        return len(self.datagen)
+#     def __len__(self):
+#         return len(self.datagen)
 
-    def __getitem__(self, x):
-        images, *rest = self.datagen[x]
-        augmented = []
-        for image in images:
-            image = self.augment(image=image)['image']
-            augmented.append(image)
-        return (np.array(augmented), *rest)
+#     def __getitem__(self, x):
+#         images, *rest = self.datagen[x]
+#         augmented = []
+#         for image in images:
+#             image = self.augment(image=image)['image']
+#             augmented.append(image)
+#         return (np.array(augmented), *rest)
 
 #####################################
-train_datagen = ImageDataGenerator(
-    rescale=1./255,
-    rotation_range=30,
-    width_shift_range=0.2,
-    height_shift_range=0.2,
-    zoom_range=0.2,
-    horizontal_flip=True,
-    fill_mode='nearest',
-    preprocessing_function=custom_preprocess_fn
-)
+seq = Sequence(RandomHorizontalFlip(), RandomScale(), RandomTranslate(), RandomRotate(10), RandomShear())
 
-train_datagen = AugmentDataGenerator(train_datagen, A.Compose([
-        A.HorizontalFlip(p=0.5),
-        A.ShiftScaleRotate(p=0.5),
-        A.RandomBrightnessContrast(p=0.3),
-        A.RGBShift(r_shift_limit=30, g_shift_limit=30, b_shift_limit=30, p=0.3),
-    ],
-    bbox_params=A.BboxParams(format='coco'),
-))
-
-validation_datagen = ImageDataGenerator(rescale=1./255)
-
+train_datagen = ImageDataGenerator(preprocessing_function = seq).flow_from_dataframe(
+        dataframe=traindf,
+        directory=TRAIN_PATH,
+        x_col='image_id',
+        y_col='target',
+        target_size=(224, 224),
+    )
 # create the training and validation sets
-train_generator = train_datagen.flow_from_directory(TRAIN_PATH,
-                                                    target_size=(256, 256),
-                                                    batch_size=BATCH_SIZE)
+# train_generator = train_datagen.flow(TRAIN_PATH,
+#                                                     target_size=(256, 256),
+#                                                     batch_size=BATCH_SIZE)
 
-validation_generator = validation_datagen.flow_from_directory(VALID_PATH,
-                                                            target_size=(256, 256),
-                                                            batch_size=BATCH_SIZE)
+# validation_generator = validation_datagen.flow_from_directory(VALID_PATH,
+#                                                             target_size=(256, 256),
+#                                                             batch_size=BATCH_SIZE)
+
+valid_datagen = ImageDataGenerator(preprocessing_function = seq).flow_from_dataframe(
+        dataframe=validdf,
+        directory=VALID_PATH,
+        x_col='image_id',
+        y_col='target',
+        target_size=(224, 224),
+    )
 
 # load the VGG16 network, ensuring the head FC layers are left off
 vgg = tf.keras.applications.vgg16.VGG16(weights="imagenet", include_top=False,
@@ -243,9 +245,9 @@ print(model.summary())
 print("[INFO] training bounding box regressor...")
 H = model.fit(
     #trainImages, trainTargets,
-    train_generator,
+    train_datagen,
     #validation_data=(testImages, testTargets),
-    validation_data = validation_generator,
+    validation_data = valid_datagen,
     batch_size=BATCH_SIZE,
     epochs=NUM_EPOCHS,
     verbose=1)
